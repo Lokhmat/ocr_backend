@@ -1,0 +1,1 @@
+SELECT user_id FROM app.tokens WHERE token = :token AND (expires_at IS NULL OR expires_at >= NOW()) LIMIT 1;

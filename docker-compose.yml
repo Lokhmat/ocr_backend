@@ -1,0 +1,84 @@
+services:
+  app:
+    container_name: app
+    build: ./app
+    env_file:
+      - .env
+    depends_on:
+      - database
+      - minio
+    networks:
+      - app-network
+    restart: always
+
+  readonly_backend:
+    container_name: readonly_backend
+    build: ./readonly_backend
+    env_file:
+      - .env
+    depends_on:
+      - database
+      - minio
+    networks:
+      - app-network
+    restart: always
+
+  # qwen:
+  #   build:
+  #     context: ./qwen
+  #   container_name: qwen
+  #   expose:
+  #     - "80"   # Expose only to internal docker network
+  #   networks:
+  #     - app-network
+
+  database:
+    container_name: database
+    build: ./database
+    volumes:
+      - database:/var/lib/postgresql/data/
+    env_file:
+      - .env
+    ports:
+      - 5432:5432
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+    restart: always
+
+  nginx:
+    container_name: nginx
+    image: nginx:latest
+    restart: always
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+    ports:
+      - 80:80
+    networks:
+      - app-network
+    depends_on:
+      - app
+      - readonly_backend
+
+  minio:
+    container_name: minio
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    env_file:
+      - .env
+    volumes:
+      - minio-data:/data
+    networks:
+      - app-network
+    restart: always
+
+volumes:
+  database:
+  minio-data:
+
+networks:
+  app-network:

@@ -23,6 +23,15 @@ services:
       - app-network
     restart: always
 
+  ocr-frontend:
+    container_name: ocr-frontend
+    build: ./ocr-frontend
+    env_file:
+      - ocr-frontend/.env
+    networks:
+      - app-network
+    restart: always
+
   # qwen:
   #   build:
   #     context: ./qwen
@@ -63,6 +72,7 @@ services:
     depends_on:
       - app
       - readonly_backend
+      - ocr-frontend
 
   minio:
     container_name: minio

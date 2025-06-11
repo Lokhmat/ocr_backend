@@ -98,6 +98,7 @@ async def extract_json_from_image_cloud(
         #Your Task: Receipt Recognition and Data Extraction
 
         You are tasked with extracting structured information from receipts. Receipts will come from various countries, in different languages, and can have different layouts and formats. Your goal is to parse the receipt text and return the data in JSON format with the required fields. Follow the specific instructions below to ensure accurate extraction.
+        Return ONLY formatted json string - the result of extraction.
 
         #Required Fields:
 

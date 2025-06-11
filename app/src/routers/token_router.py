@@ -8,16 +8,13 @@ from ..auth.security import get_current_user
 
 token_router = APIRouter(tags=["token"])
 
+
 @token_router.post("/token", response_model=TokenResponse)
 async def create_token_endpoint(
-    request: TokenCreateRequest,
-    user_id: str = Depends(get_current_user)
+    request: TokenCreateRequest, user_id: str = Depends(get_current_user)
 ):
     try:
         result = create_token(connector, user_id, request.days_valid)
-        return TokenResponse(
-            token=result["token"],
-            expires_at=result["expires_at"]
-        )
+        return TokenResponse(token=result["token"], expires_at=result["expires_at"])
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e)) 
+        raise HTTPException(status_code=400, detail=str(e))

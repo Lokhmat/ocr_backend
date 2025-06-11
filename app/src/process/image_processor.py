@@ -8,6 +8,7 @@ from typing import Dict, Any, Optional
 from fastapi import HTTPException
 import uuid
 
+
 class TokenManager:
     def __init__(self, client_id: str, username: str, password: str):
         self.client_id = client_id
@@ -19,7 +20,7 @@ class TokenManager:
 
     async def get_token(self) -> str:
         current_time = time.time()
-        
+
         # Return existing token if it's still valid
         if self._access_token and current_time < self._token_expiry:
             return self._access_token
@@ -32,39 +33,35 @@ class TokenManager:
             "password": self.password,
         }
 
-        token_headers = {
-            "Content-Type": "application/x-www-form-urlencoded"
-        }
+        token_headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.post(self.token_url, data=token_data, headers=token_headers) as response:
+                async with session.post(
+                    self.token_url, data=token_data, headers=token_headers
+                ) as response:
                     response.raise_for_status()
                     token_response = await response.json()
-                    
+
                     self._access_token = token_response["access_token"]
                     # Set token expiry to 10 minutes from now
                     self._token_expiry = current_time + 600  # 600 seconds = 10 minutes
-                    
+
                     return self._access_token
         except Exception as e:
             raise HTTPException(
                 status_code=500,
-                detail=f"Failed to obtain authentication token: {str(e)}"
+                detail=f"Failed to obtain authentication token: {str(e)}",
             )
+
 
 # Initialize TokenManager with environment variables
 token_manager = TokenManager(
     client_id=os.getenv("STRATPRO_CLIENT_ID"),
     username=os.getenv("STRATPRO_LOGIN"),
-    password=os.getenv("STRATPRO_PASSWORD")
+    password=os.getenv("STRATPRO_PASSWORD"),
 )
 
-# Configure OpenAI client for OpenRouter
-client = openai.OpenAI(
-    api_key=os.getenv("OPENROUTER_API_KEY"),
-    base_url="https://openrouter.ai/api/v1"
-)
 
 def encode_image(image_path: str) -> str:
     """Encode image file to base64 string."""
@@ -74,16 +71,20 @@ def encode_image(image_path: str) -> str:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to encode image: {str(e)}")
 
-def extract_json_from_image_cloud(image_path: str) -> Dict[str, Any]:
+
+async def extract_json_from_image_cloud(
+    image_path: str, cloud_key: str
+) -> Dict[str, Any]:
     """
-    Extract JSON data from an image using Qwen model.
-    
+    Extract JSON data from an image using Qwen model via OpenRouter API.
+
     Args:
         image_path: Path to the image file
-        
+        cloud_key: User's OpenRouter API key
+
     Returns:
         Dictionary containing the extracted JSON data
-        
+
     Raises:
         HTTPException: If the API call fails or returns invalid data
     """
@@ -91,7 +92,7 @@ def extract_json_from_image_cloud(image_path: str) -> Dict[str, Any]:
         # Encode image
         encoded_image = encode_image(image_path)
         print("Encoded image")
-        
+
         # Create prompt for JSON extraction
         prompt_text = """
         #Your Task: Receipt Recognition and Data Extraction
@@ -172,110 +173,134 @@ def extract_json_from_image_cloud(image_path: str) -> Dict[str, Any]:
         ]
         }
         """
-        
-        # Make API call to Qwen model
-        response = client.chat.completions.create(
-            model="qwen/qwen2.5-vl-72b-instruct:free",
-            messages=[
-                {"role": "user", "content": [
-                    {"type": "text", "text": prompt_text},
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/jpeg;base64,{encoded_image}"
-                        }
-                    }
-                ]}
+
+        # Prepare the request payload
+        payload = {
+            "model": "qwen/qwen2.5-vl-72b-instruct:free",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt_text},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{encoded_image}"
+                            },
+                        },
+                    ],
+                }
             ],
-        )
-        
-        # Extract and parse the response
-        content = response.choices[0].message.content.replace("```", "").replace("json", "")
-        
-        # Try to parse the response as JSON
-        try:
-            return json.loads(content)
-        except json.JSONDecodeError:
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to parse model response as JSON"
-            )
-            
+        }
+
+        # Make API call to OpenRouter
+        headers = {
+            "Authorization": f"Bearer {cloud_key}",
+        }
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                json=payload,
+                headers=headers,
+            ) as response:
+                if response.status != 200:
+                    raise HTTPException(
+                        status_code=response.status,
+                        detail=f"Failed to process image: {await response.text()}",
+                    )
+
+                response_data = await response.json()
+                content = (
+                    response_data["choices"][0]["message"]["content"]
+                    .replace("```", "")
+                    .replace("json", "")
+                )
+
+                # Try to parse the response as JSON
+                try:
+                    return json.loads(content)
+                except json.JSONDecodeError:
+                    raise HTTPException(
+                        status_code=500, detail="Failed to parse model response as JSON"
+                    )
+
     except Exception as e:
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to process image: {str(e)}"
-        ) 
-    
+            status_code=500, detail=f"Failed to process image: {str(e)}"
+        )
+
 
 async def upload_image_to_s3(s3_key: str, image_path: str, access_token: str) -> str:
     """
     Upload image to StratPro S3 storage and return the file key.
-    
+
     Args:
         image_path: Path to the image file
         access_token: Authentication token
-        
+
     Returns:
         str: File key to use in the prediction request
-        
+
     Raises:
         HTTPException: If the upload fails
     """
     try:
-        headers = {
-            "Authorization": f"Bearer {access_token}"
-        }
+        headers = {"Authorization": f"Bearer {access_token}"}
 
         async with aiohttp.ClientSession() as session:
             # Get presigned URL
             async with session.put(
                 f"https://platform.stratpro.hse.ru/pu-ocr-qwen-pa-qwen/files/users/{s3_key}",
-                headers=headers
+                headers=headers,
             ) as response:
                 if response.status == 400:
                     async with session.get(
                         f"https://platform.stratpro.hse.ru/pu-ocr-qwen-pa-qwen/files/users/{s3_key}",
-                        headers=headers
+                        headers=headers,
                     ) as get_response:
                         response = get_response
-                
+
                 if response.status not in [200, 201]:
                     raise HTTPException(
                         status_code=response.status,
-                        detail=f"Failed to get presigned URL: {await response.text()}"
+                        detail=f"Failed to get presigned URL: {await response.text()}",
                     )
-                    
+
                 files_info = await response.json()
                 print(files_info)
-            
+
             # Upload file to S3
             with open(image_path, "rb") as f:
-                async with session.put(files_info["presigned_put_url"], data=f) as upload_response:
+                async with session.put(
+                    files_info["presigned_put_url"], data=f
+                ) as upload_response:
                     if upload_response.status != 200:
                         raise HTTPException(
                             status_code=upload_response.status,
-                            detail=f"Failed to upload file to S3: {await upload_response.text()}"
+                            detail=f"Failed to upload file to S3: {await upload_response.text()}",
                         )
-                    
+
         return s3_key
-        
+
     except Exception as e:
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to upload image to S3: {str(e)}"
+            status_code=500, detail=f"Failed to upload image to S3: {str(e)}"
         )
 
-async def extract_json_from_image_premise(s3_key: str, image_path: str) -> Dict[str, Any]:
+
+async def extract_json_from_image_premise(
+    s3_key: str, image_path: str
+) -> Dict[str, Any]:
     """
     Extract JSON data from an image using Qwen model via StratPro platform.
-    
+
     Args:
         image_path: Path to the image file
-        
+
     Returns:
         Dictionary containing the extracted JSON data
-        
+
     Raises:
         HTTPException: If the API call fails or returns invalid data
     """
@@ -319,56 +344,50 @@ async def extract_json_from_image_premise(s3_key: str, image_path: str) -> Dict[
                     "name": "prompt",
                     "data": prompt,
                     "datatype": "str",
-                    "shape": len(prompt)
+                    "shape": len(prompt),
                 },
                 {
                     "name": "image",
-                    "data": file_key.replace('pu-ocr-qwen-pa-qwen/files/users/', ''),
+                    "data": file_key.replace("pu-ocr-qwen-pa-qwen/files/users/", ""),
                     "datatype": "FILE",
                     "content_type": f"image/{file_key.split('.')[-1]}",
-                    "shape": 1
-                }
+                    "shape": 1,
+                },
             ],
-            "output_fields": [
-                {
-                    "name": "echo",
-                    "datatype": "str"
-                }
-            ]
+            "output_fields": [{"name": "echo", "datatype": "str"}],
         }
 
         print(payload)
 
         # Send the request with authentication
-        headers = {
-            "Authorization": f"Bearer {access_token}"
-        }
-        
-        print('Going to send request to stratpro')
+        headers = {"Authorization": f"Bearer {access_token}"}
+
+        print("Going to send request to stratpro")
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 "https://platform.stratpro.hse.ru/pu-ocr-qwen-pa-qwen/qwen/predict",
                 json=payload,
                 headers=headers,
-                timeout=300
+                timeout=300,
             ) as response:
                 if response.status == 200:
                     # Extract the response content
                     response_data = await response.json()
                     json_str = response_data["outputs"][0]["data"]
-                    
+
                     # Clean up the response string (remove markdown code block markers)
-                    json_str = json_str.replace("```json", "").replace("```", "").strip()
+                    json_str = (
+                        json_str.replace("```json", "").replace("```", "").strip()
+                    )
                     print(json_str)
                     # Parse the JSON response
                     return json.loads(json_str)
                 else:
                     raise HTTPException(
                         status_code=response.status,
-                        detail=f"Failed to extract JSON from image: {await response.text()}"
+                        detail=f"Failed to extract JSON from image: {await response.text()}",
                     )
     except Exception as e:
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to process image: {str(e)}"
-        ) 
+            status_code=500, detail=f"Failed to process image: {str(e)}"
+        )

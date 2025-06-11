@@ -3,9 +3,11 @@ from uuid import UUID
 from pydantic import BaseModel
 from datetime import datetime
 
+
 class ImageUploadResponse(BaseModel):
     image_id: str
     status: str
+
 
 class ImageStatus(BaseModel):
     image_id: str
@@ -14,9 +16,11 @@ class ImageStatus(BaseModel):
     result_json: str
     created_at: datetime
 
+
 class PaginatedImageResponse(BaseModel):
     images: List[ImageStatus]
     next_cursor: Optional[str] = None
+
 
 class ImageListParams(BaseModel):
     cursor: Optional[str] = None

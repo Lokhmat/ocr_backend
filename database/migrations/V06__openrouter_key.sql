@@ -1,0 +1,2 @@
+ALTER TABLE app.users
+ADD cloud_key TEXT DEFAULT NULL;

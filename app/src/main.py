@@ -9,6 +9,7 @@ from .routers.auth_router import auth_router
 from .routers.process_router import process_router
 from .routers.image_router import image_router
 from .routers.token_router import token_router
+from .routers.user_router import user_router
 
 try:
     from . import bucket_init
@@ -36,5 +37,6 @@ app.include_router(auth_router)
 app.include_router(process_router)
 app.include_router(image_router)
 app.include_router(token_router)
+app.include_router(user_router)
 
 basic_config(logging.DEBUG, buffered=True)

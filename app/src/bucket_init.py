@@ -15,7 +15,7 @@ try:
     s3.create_bucket(Bucket=bucket_name)
     print(f"✅ Bucket '{bucket_name}' created or already exists.")
 except ClientError as e:
-    if e.response['Error']['Code'] == 'BucketAlreadyOwnedByYou':
+    if e.response["Error"]["Code"] == "BucketAlreadyOwnedByYou":
         print(f"Bucket '{bucket_name}' already exists.")
     else:
         print(f"Error creating bucket: {e}")

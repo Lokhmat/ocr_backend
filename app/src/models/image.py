@@ -99,7 +99,7 @@ class Image:
                     image_id=str(row.id),
                     s3_key=str(row.s3_key),
                     status=str(row.status),
-                    result_json=str(row.result_json),
+                    result_json=json.dumps(row.result_json),
                     created_at=row.created_at,
                 )
                 for row in results

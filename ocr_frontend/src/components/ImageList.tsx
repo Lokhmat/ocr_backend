@@ -3,12 +3,13 @@
 import type React from "react"
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useAuth } from "../contexts/AuthContext"
+import ReviewModal from "./ReviewModal"
 
 interface Image {
   image_id: string
   s3_key: string
   status: string
-  result_json: any
+  result_json: string
   created_at: string
 }
 
@@ -17,11 +18,27 @@ interface ImagesResponse {
   next_cursor: string | null
 }
 
+const formatJson = (jsonString: string) => {
+  try {
+    // Replace single quotes with double quotes, but be careful not to replace escaped single quotes
+    const sanitizedJson = jsonString.replace(/(?<!\\)'/g, '"')
+    console.log("Sanitized JSON string:", sanitizedJson);
+    const parsed = JSON.parse(sanitizedJson);
+    const formatted = JSON.stringify(parsed, null, 4);
+    console.log("Formatted JSON:", formatted);
+    return formatted;
+  } catch (error) {
+    console.error("Error formatting JSON:", error);
+    return jsonString;
+  }
+};
+
 const ImageList: React.FC = () => {
   const [images, setImages] = useState<Image[]>([])
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [selectedImage, setSelectedImage] = useState<Image | null>(null)
   const { fetchWithAuth, apiBaseUrl } = useAuth()
   const observer = useRef<IntersectionObserver | null>(null)
   const lastImageElementRef = useCallback((node: HTMLDivElement | null) => {
@@ -98,6 +115,21 @@ const ImageList: React.FC = () => {
     }
   }
 
+  // Handle review button click
+  const handleReviewClick = (image: Image) => {
+    setSelectedImage(image);
+  };
+
+  // Handle modal close
+  const handleModalClose = () => {
+    setSelectedImage(null);
+  };
+
+  // Handle successful save
+  const handleSaveSuccess = () => {
+    fetchImages(); // Refresh the image list
+  };
+
   // Fetch images on mount and when refresh event is triggered
   useEffect(() => {
     fetchImages()
@@ -161,16 +193,21 @@ const ImageList: React.FC = () => {
                   Status: {image.status}
                 </p>
               </div>
+              {image.result_json && (
+                <button
+                  onClick={() => handleReviewClick(image)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Edit result
+                </button>
+              )}
             </div>
             {image.result_json && (
               <div className="mt-4">
                 <h4 className="text-sm font-medium text-gray-700">Results:</h4>
                 <div className="mt-2 p-4 bg-gray-50 rounded-lg overflow-x-auto">
-                  <pre className="text-sm font-mono whitespace-pre-wrap">
-                    {JSON.stringify(image.result_json, null, 2)
-                      .replace(/\\n/g, '\n')
-                      .replace(/\\"/g, '"')
-                      .replace(/^"|"$/g, '')}
+                  <pre className="whitespace-pre-wrap break-words">
+                    {formatJson(image.result_json)}
                   </pre>
                 </div>
               </div>
@@ -182,6 +219,17 @@ const ImageList: React.FC = () => {
         <div className="w-full text-center py-4">
           <p className="text-gray-600">Loading more images...</p>
         </div>
+      )}
+
+      {selectedImage && (
+        <ReviewModal
+          isOpen={true}
+          onClose={handleModalClose}
+          imageId={selectedImage.image_id}
+          imageUrl={`${apiBaseUrl}/get-image?image_id=${encodeURIComponent(selectedImage.image_id)}`}
+          initialJson={selectedImage.result_json}
+          onSave={handleSaveSuccess}
+        />
       )}
     </div>
   )

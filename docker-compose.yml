@@ -27,7 +27,7 @@ services:
     container_name: ocr_frontend
     build: ./ocr_frontend
     env_file:
-      - ocr_frontend/.env
+      - .env
     networks:
       - app-network
     restart: always

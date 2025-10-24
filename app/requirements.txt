@@ -35,6 +35,7 @@ psycopg2-binary==2.9.10
 pyasn1==0.4.8
 pydantic==2.5.3
 pydantic_core==2.14.6
+pytest==8.4.2
 python-dateutil==2.9.0.post0
 python-dotenv==1.0.0
 python-jose==3.4.0

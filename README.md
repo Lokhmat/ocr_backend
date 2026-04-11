@@ -1,4 +1,4 @@
-# System for Data Extraction from Payment Documents
+# System for Data Extraction from Payment Documents.
 
 This project provides a **secure, on-premise solution** for extracting structured financial data (e.g., vendor, date, total, line items) from images of receipts and invoices using state-of-the-art **Vision-Language Models (VLMs)**. Designed with privacy, modularity, and ease of deployment in mind, it enables small and medium businesses to automate financial document processing without relying on cloud services.
 
